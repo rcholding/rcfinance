@@ -1,0 +1,135 @@
+# RC‑Finance‑IA — Documentação Geral
+
+> **Visão geral completa** do estado atual do projeto, histórico de decisões, arquitetura de pastas, fases concluídas e road‑map futuro. Use este documento como referência única para onboarding e continuidade dos trabalhos.
+
+---
+
+## 1. Objetivo do Projeto
+
+Construir um **gerenciador financeiro assistido por IA** que opere *localmente* (Windows 10, CPU AMD Athlon 320GE, 16 GB RAM) com as seguintes metas:
+
+1. **Registro rápido de transações** (income/expense) manual ou por importação (CSV/JSON/OCR/voz).
+2. **Metas financeiras inteligentes** com priorização automática e recomendações de alocação.
+3. **Dashboard de fluxo de caixa** e indicadores chave.
+4. **IA classificadora** para categoria automática de despesas/receitas.
+5. **Interface Streamlit** (leve, amigável, dark‑theme) e banco SQLite (sqlite‑utils).
+6. Caminho de evolução: comandos por voz → integração open‑finance → deploy opcional (Streamlit Cloud / Docker).
+
+---
+
+## 2. Linha do Tempo & Fases
+
+| Fase  | Data           | Status | Entregas chave                                                                                                      |
+| ----- | -------------- | ------ | ------------------------------------------------------------------------------------------------------------------- |
+| **0** | Jul 27 2025    | ✅      | Ideação, coleta de requisitos do usuário, export JSON backup (transações/goals)                                     |
+| **1** | Ago 05 2025    | ✅      | Ambiente Miniconda (`iafinance`), VS Code, dependências `fastapi uvicorn streamlit sqlite-utils pandas pytesseract` |
+| **2** | Ago 06 2025    | ✅      | CRUD de **Transações** + IA categoria (`utils/ai_classifier.py`), Dashboard inicial (matplotlib)                    |
+| **3** | Ago 06‑07 2025 | 🚧     | Importação CSV/JSON, OCR via Tesseract, edição de transações (documento “Fase3 Importacao IA”)                      |
+| **4** | ‑‑             | ⏳      | Módulo completo de **Metas inteligentes** (prioridade, alertas)                                                     |
+| **5** | ‑‑             | ⏳      | Speech‑to‑Text (Whisper) para input por voz                                                                         |
+| **6** | ‑‑             | ⏳      | Integração open‑finance / APIs bancárias                                                                            |
+| **7** | ‑‑             | ⏳      | Empacotamento Docker + deploy opcional                                                                              |
+
+Legenda: ✅ concluído 🚧 em andamento ⏳ planejado
+
+---
+
+## 3. Estrutura de Pastas (repo local `C:\RC‑Finance‑IA`)
+
+```
+RC‑Finance‑IA/
+├─ data/
+│  └─ finance.db          # SQLite gerenciado por sqlite‑utils
+├─ scripts/
+│  ├─ ui.py               # App Streamlit principal
+│  ├─ utils/
+│  │  ├─ ai_classifier.py  # Sugere categoria via ML leve
+│  │  └─ ocr_reader.py     # Wrapper Tesseract OCR
+│  └─ init_db.py          # Cria tabelas (transactions, goals)
+├─ env/                   # (reservado p/ virtual env snapshots)
+├─ README.md
+└─ docs/                  # (gerado pelo Canvas)
+```
+
+---
+
+## 4. Tecnologias & Bibliotecas
+
+| Camada     | Stack                                    | Função                              |
+| ---------- | ---------------------------------------- | ----------------------------------- |
+| *Frontend* | **Streamlit** 1.36 (dark‑theme)          | UI reativa, sidebar, forms          |
+| *Backend*  | **sqlite‑utils**                         | ORM mínimo + migrations             |
+| *IA*       | `sentence-transformers all-MiniLM-L6-v2` | Embeddings p/ classificar categoria |
+| *OCR*      | **Tesseract 5.3.4** + `pytesseract`      | Extração de texto de imagens/PDFs   |
+| *Gráficos* | **matplotlib**                           | Fluxo de caixa diário               |
+
+---
+
+## 5. Resumo do Código Atual (v0.3)
+
+### `scripts/ui.py`
+
+- Páginas: **Transações** | **Metas** | **Dashboard**
+- `st.experimental_rerun()` substituído por `st.rerun()` (compat. Streamlit >=1.30)
+- Classe utilitária `classify_transaction(desc)` importada de `utils.ai_classifier`.
+- Import CSV/JSON → DataFrame → inserção `db["goals"].insert(...)`.
+- OCR stub chamando `utils.ocr_reader.extract_text_from_image()`.
+
+### `utils/ai_classifier.py`
+
+```python
+from sentence_transformers import SentenceTransformer, util
+model = SentenceTransformer("all-MiniLM-L6-v2")
+TAGS = ["alimentação","saúde","lazer","moradia","transporte","investimento"]
+
+def classify_transaction(desc: str) -> str:
+    emb = model.encode(desc, convert_to_tensor=True)
+    scores = [util.cos_sim(emb, model.encode(t))[0][0] for t in TAGS]
+    return TAGS[int(max(range(len(scores)), key=scores.__getitem__))]
+```
+
+### `utils/ocr_reader.py`
+
+- Configura `pytesseract.tesseract_cmd` com caminho absoluto.
+- Função retorna texto UTF‑8 (lang `por`).
+
+---
+
+## 6. Bugs / Pendências Atuais
+
+1. **Mensagem de erro** `AttributeError: module 'streamlit' has no attribute 'experimental_rerun'` – corrigido trocando por `st.rerun()`.
+2. **Dashboard eixo x** desalinhado: index `date` precisa de `df.sort_index()` antes de plotar.
+3. **Metas – Cadastrar/Importar/OCR** marcados como "Funcionalidade em construção" (Fase 3).
+
+---
+
+## 7. Próximas Tarefas (detalhe)
+
+| #   | Ação                              | Arquivo                     | Dica Copiar‑e‑Colar                                         |
+| --- | --------------------------------- | --------------------------- | ----------------------------------------------------------- |
+| 3.1 | Finalizar upload CSV/JSON         | `ui.py` (aba Importar)      | see bloco **Importação de CSV/JSON** no doc "Fase3"         |
+| 3.2 | Integrar OCR PDF (pdf2image)      | `utils/ocr_reader.py`       | converter PDF → PNG → `extract_text_from_image`             |
+| 3.3 | Formulário "Cadastrar Meta"       | `ui.py` (aba Cadastrar)     | campos: `name`, `target`, `current`, `priority`, `deadline` |
+| 3.4 | Edição/Exclusão de Metas          | `ui.py`                     | usar `db["goals"].update()` e `delete()`                    |
+| 4.1 | Algoritmo de alocação inteligente | `utils/allocator.py` (novo) | heurística 50‑30‑20 + prioridades                           |
+| 4.2 | Botão “Gerar plano”               | `Dashboard`                 | retorna sugeridas via allocator                             |
+
+---
+
+## 8. FAQ de Desenvolvimento Rápido
+
+1. **Como resetar o DB?**
+   ```powershell
+   del data\finance.db & python scripts\init_db.py
+   ```
+2. **Erro Tesseract path?** Verifique `pytesseract.pytesseract.tesseract_cmd`.
+3. **Atualizar dependências?** `pip install -U streamlit pandas matplotlib pytesseract`.
+
+---
+
+## 9. Conclusão
+
+O núcleo transacional está sólido (CRUD + IA). A Fase 3 adicionará importações e OCR para acelerar entrada de dados. Em seguida, avançaremos para metas inteligentes e automações. Este documento será atualizado a cada marco.
+
+> **Última atualização:** 07 ago 2025 — ChatGPT RC‑Finance‑IA assistant.
+
